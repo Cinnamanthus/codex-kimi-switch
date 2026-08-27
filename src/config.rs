@@ -1,14 +1,18 @@
 //! File- and environment-backed settings for the adapter.
 //!
-//! Precedence (highest first): CLI flag → environment variable → config file
-//! (`codex_kimi_switch.toml` next to the exe, else
-//! `%USERPROFILE%\.codex-kimi-switch\config.toml`) → built-in default.
+//! Precedence (highest first): CLI flag → config file → environment variable
+//! → built-in default. The config file outranks the environment because
+//! ambient env vars are exactly the kind of stale, invisible state that
+//! caused silent key mismatches. The config file lives in exactly one place —
+//! `%USERPROFILE%\.codex-kimi-switch\config.toml` — so there is no way for
+//! two copies to drift apart.
 
 use std::path::PathBuf;
 
 const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:8787";
 const DEFAULT_UPSTREAM_BASE: &str = "https://api.kimi.com/coding/v1";
-const FILE_CONFIG_NAME: &str = "codex_kimi_switch.toml";
+const CONFIG_DIR_NAME: &str = ".codex-kimi-switch";
+const CONFIG_FILE_NAME: &str = "config.toml";
 
 /// Runtime configuration for the local adapter.
 #[derive(Debug, Clone)]
@@ -34,7 +38,7 @@ impl Settings {
             upstream_base: env_nonempty("CODEX_KIMI_UPSTREAM_BASE")
                 .or(file.upstream_base)
                 .unwrap_or_else(|| DEFAULT_UPSTREAM_BASE.to_owned()),
-            api_key: env_nonempty("KIMI_API_KEY").or(file.api_key),
+            api_key: file.api_key.or_else(|| env_nonempty("KIMI_API_KEY")),
             sanitize_always: env_flag("CODEX_KIMI_SANITIZE_ALWAYS"),
         }
     }
@@ -59,22 +63,40 @@ struct FileConfig {
 
 impl FileConfig {
     fn load() -> Self {
-        for path in candidate_paths() {
-            let Ok(text) = std::fs::read_to_string(&path) else {
-                continue;
-            };
-            let Ok(doc) = text.parse::<toml_edit::DocumentMut>() else {
-                continue;
-            };
-            let table = doc.as_table();
-            return Self {
-                listen_addr: read_string(table, "listen_addr"),
-                upstream_base: read_string(table, "upstream_base"),
-                api_key: read_string(table, "api_key"),
-            };
+        let Some(path) = config_file_path() else {
+            return Self::default();
+        };
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            return Self::default();
+        };
+        match text.parse::<toml_edit::DocumentMut>() {
+            Ok(doc) => {
+                let table = doc.as_table();
+                Self {
+                    listen_addr: read_string(table, "listen_addr"),
+                    upstream_base: read_string(table, "upstream_base"),
+                    api_key: read_string(table, "api_key"),
+                }
+            }
+            Err(error) => {
+                tracing::warn!(
+                    path = %path.display(),
+                    %error,
+                    "config file exists but failed to parse; ignoring it"
+                );
+                Self::default()
+            }
         }
-        Self::default()
     }
+}
+
+fn config_file_path() -> Option<PathBuf> {
+    let home = env_nonempty("USERPROFILE").or_else(|| env_nonempty("HOME"))?;
+    Some(
+        PathBuf::from(home)
+            .join(CONFIG_DIR_NAME)
+            .join(CONFIG_FILE_NAME),
+    )
 }
 
 fn read_string(table: &toml_edit::Table, key: &str) -> Option<String> {
@@ -83,23 +105,6 @@ fn read_string(table: &toml_edit::Table, key: &str) -> Option<String> {
         .and_then(|item| item.as_str())
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
-}
-
-fn candidate_paths() -> Vec<PathBuf> {
-    let mut paths = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            paths.push(dir.join(FILE_CONFIG_NAME));
-        }
-    }
-    if let Some(home) = env_nonempty("USERPROFILE").or_else(|| env_nonempty("HOME")) {
-        paths.push(
-            PathBuf::from(home)
-                .join(".codex-kimi-switch")
-                .join("config.toml"),
-        );
-    }
-    paths
 }
 
 fn env_nonempty(name: &str) -> Option<String> {
