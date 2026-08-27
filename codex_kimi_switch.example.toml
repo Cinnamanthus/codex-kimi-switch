@@ -1,0 +1,8 @@
+# codex_kimi_switch 配置示例。
+# 复制为 codex_kimi_switch.toml 放到 exe 同目录，或复制到
+# %USERPROFILE%\.codex-kimi-switch\config.toml，然后填入你的 Kimi API key。
+api_key = "sk-kimi-..."
+
+# 可选项（默认值如下）：
+# listen_addr = "127.0.0.1:8787"
+# upstream_base = "https://api.kimi.com/coding/v1"
