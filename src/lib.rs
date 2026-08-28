@@ -10,3 +10,5 @@ pub mod env_var;
 pub mod proxy;
 /// Moonshot Flavored JSON Schema normalization.
 pub mod schema;
+/// Full uninstall: stop instances, restore Codex state, remove data files.
+pub mod uninstall;

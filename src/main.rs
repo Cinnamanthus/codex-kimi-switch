@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use anyhow::Context;
 use clap::{Parser, Subcommand};
 use codex_kimi_switch::{
     codex_config::{CodexConfigManager, default_codex_home},
@@ -25,6 +26,12 @@ enum Command {
     Enable(ConfigArgs),
     /// Restore the pre-takeover Codex config and exit.
     Disable {
+        /// Override the Codex home directory (default: `CODEX_HOME` or ~/.codex).
+        #[arg(long)]
+        codex_home: Option<PathBuf>,
+    },
+    /// Stop the adapter, restore Codex state, and remove all adapter data files.
+    Uninstall {
         /// Override the Codex home directory (default: `CODEX_HOME` or ~/.codex).
         #[arg(long)]
         codex_home: Option<PathBuf>,
@@ -86,6 +93,23 @@ async fn main() -> anyhow::Result<()> {
             } else {
                 tracing::info!("no takeover state found; nothing to restore");
             }
+            Ok(())
+        }
+        Command::Uninstall { codex_home } => {
+            let codex_home = self::codex_home(codex_home)?;
+            let config_dir = codex_kimi_switch::config::config_dir()
+                .context("cannot locate the user home directory")?;
+            let report = codex_kimi_switch::uninstall::run(codex_home, &config_dir, true)?;
+            tracing::info!(
+                stopped_pids = ?report.stopped_pids,
+                codex_restored = report.codex_restored,
+                config_dir_removed = report.config_dir_removed,
+                "uninstall complete"
+            );
+            tracing::info!(
+                "adapter data is gone; to finish, delete the project directory manually \
+                 (the folder containing this exe, typically the repository root)"
+            );
             Ok(())
         }
     }

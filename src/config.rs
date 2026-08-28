@@ -90,13 +90,14 @@ impl FileConfig {
     }
 }
 
-fn config_file_path() -> Option<PathBuf> {
+/// Directory holding the adapter's config file (the single config location).
+pub fn config_dir() -> Option<PathBuf> {
     let home = env_nonempty("USERPROFILE").or_else(|| env_nonempty("HOME"))?;
-    Some(
-        PathBuf::from(home)
-            .join(CONFIG_DIR_NAME)
-            .join(CONFIG_FILE_NAME),
-    )
+    Some(PathBuf::from(home).join(CONFIG_DIR_NAME))
+}
+
+fn config_file_path() -> Option<PathBuf> {
+    config_dir().map(|dir| dir.join(CONFIG_FILE_NAME))
 }
 
 fn read_string(table: &toml_edit::Table, key: &str) -> Option<String> {

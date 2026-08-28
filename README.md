@@ -108,6 +108,34 @@ Select-String -Path "$env:USERPROFILE\.codex\config.toml" -Pattern 'base_url'
 
 ---
 
+## 卸载
+
+一条命令完成全部数据清理：
+
+```powershell
+.\target\release\codex_kimi_switch.exe uninstall
+```
+
+它依次执行：
+
+1. **结束所有正在运行的适配器进程**（`codex_kimi_switch.exe`，自身除外）；
+2. **恢复 Codex 配置**：`~/.codex/config.toml` 字节级还原，接管时加的 `env_key` 行消失，备份文件清除；
+3. **回滚环境变量**：用户级 `KIMI_API_KEY` 恢复为接管前的值（接管前不存在则删除）；
+4. **删除适配器数据目录** `%USERPROFILE%\.codex-kimi-switch\`（含保存 API key 的 `config.toml`）。
+
+日志会逐项报告做了什么（结束了哪些 PID、是否还原了配置、是否删除了数据目录）。
+
+**最后一步需要手动完成**：删除项目目录——也就是你 clone/构建本仓库的位置（含源码和 `target\release\codex_kimi_switch.exe`）。Windows 下运行中的 exe 无法安全删除自身，所以这一步只能手动：
+
+```powershell
+# 按你的实际位置调整
+Remove-Item -Recurse -Force "D:\Personal Projects\Codex_kimi_switch"
+```
+
+卸载不触碰 Rust 工具链自身的缓存（`~/.cargo`、`~/.rustup`），那些属于 Rust 而不是本项目。
+
+---
+
 ## 命令
 
 | 命令 | 行为 |
@@ -115,6 +143,7 @@ Select-String -Path "$env:USERPROFILE\.codex\config.toml" -Pattern 'base_url'
 | `run`（默认，可省略） | 备份并接管 Codex 配置 → 启动代理 → Ctrl+C 退出时自动恢复配置 |
 | `enable` | 只改写 Codex 配置，不启动代理 |
 | `disable` | 恢复接管前的 Codex 配置和环境变量并退出（也是崩溃后的兜底手段） |
+| `uninstall` | 完整卸载：结束所有适配器进程 → 恢复 Codex 配置与环境变量 → 删除适配器数据目录（含 key） |
 
 ### `run` 参数
 
